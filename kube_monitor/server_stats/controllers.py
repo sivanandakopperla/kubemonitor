@@ -6,11 +6,16 @@ import pdb
 import paramiko
 from kafka import KafkaConsumer, KafkaProducer
 import logging
+
 logging.basicConfig(filename="server_stats.log",
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     filemode='a')
 logger=logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+json_file = os.path.abspath(os.path.join('.'))+'/server_details.json'
+with open(json_file, 'r') as fi:
+    server_hosts = json.load(fi)
 
 
 def publish_message(producer_instance, topic_name, key, value):
@@ -26,7 +31,8 @@ def publish_message(producer_instance, topic_name, key, value):
 def connect_kafka_producer():
     _producer = None
     try:
-        _producer = KafkaProducer(bootstrap_servers=['localhost:9092'], api_version=(0, 10))
+        _producer = KafkaProducer(bootstrap_servers=[server_hosts[kafka_host]+':'+str(server_hosts[kafka_port])],
+                                  api_version=(0, 10))
         logger.info('Kafka Creating producer obj and connected successfully')
     except Exception as ex:
         logger.error('Exception while connecting Kafka')
@@ -36,7 +42,8 @@ def connect_kafka_producer():
 
 def connect_kafka_consumer(topic_name):
     consumer = KafkaConsumer(topic_name, auto_offset_reset='earliest',
-                             bootstrap_servers=['localhost:9092'], api_version=(0, 10), consumer_timeout_ms=1000)
+                             bootstrap_servers=[server_hosts[kafka_host]+':'+str(server_hosts[kafka_port])],
+                             api_version=(0, 10), consumer_timeout_ms=1000)
     for msg in consumer:
         logging.info("Kafka message: ")
         logging.info(json.loads(msg.value))
@@ -44,7 +51,7 @@ def connect_kafka_consumer(topic_name):
 
 
 def isHostValid(ip_add):
-    host_dict = [{"host": "192.168.43.144", "username": "siva", "password": "cisco123"}]
+    host_dict = server_hosts['server_credentials']
     logger.info("Total host_dict {}".format(host_dict))
     for ip in host_dict:
         if ip["host"] == ip_add:
@@ -57,7 +64,7 @@ def isHostValid(ip_add):
 def update_stats(request, ip_add=None):
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    host_dict = [{"host": "192.168.43.144", "username": "siva", "password": "cisco123"}]
+    host_dict = server_hosts['server_credentials']
     logger.info("Total host_dict {}".format(host_dict))
     if ip_add:
         for ip in host_dict:
