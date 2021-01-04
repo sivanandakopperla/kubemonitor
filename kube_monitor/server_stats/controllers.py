@@ -1,7 +1,7 @@
 from server_stats.serializers import ServerStatsSerializer
 from server_stats.models import ServerStats
 from server_stats import metrics
-import json
+import json, os
 import pdb
 import paramiko
 from kafka import KafkaConsumer, KafkaProducer
@@ -31,7 +31,7 @@ def publish_message(producer_instance, topic_name, key, value):
 def connect_kafka_producer():
     _producer = None
     try:
-        _producer = KafkaProducer(bootstrap_servers=[server_hosts[kafka_host]+':'+str(server_hosts[kafka_port])],
+        _producer = KafkaProducer(bootstrap_servers=[server_hosts['kafka_host']+':'+str(server_hosts['kafka_port'])],
                                   api_version=(0, 10))
         logger.info('Kafka Creating producer obj and connected successfully')
     except Exception as ex:
@@ -42,11 +42,11 @@ def connect_kafka_producer():
 
 def connect_kafka_consumer(topic_name):
     consumer = KafkaConsumer(topic_name, auto_offset_reset='earliest',
-                             bootstrap_servers=[server_hosts[kafka_host]+':'+str(server_hosts[kafka_port])],
+                             bootstrap_servers=[server_hosts['kafka_host']+':'+str(server_hosts['kafka_port'])],
                              api_version=(0, 10), consumer_timeout_ms=1000)
     for msg in consumer:
         logging.info("Kafka message: ")
-        logging.info(json.loads(msg.value))
+        logging.info(msg.value)
     consumer.close()
 
 
@@ -96,7 +96,7 @@ def update_stats(request, ip_add=None):
                             'free_space': free_space,
                             'use_percentage': use_percentage}
                     stats.disk_info = disk
-                    logging.info("disk: ",disk)
+                    logging.info("disk: {}".format(disk))
                 elif cmd == 'free -tm':
                     stdin, stdout, stderr = ssh.exec_command(cmd)
                     cmd_out2 = stdout.readlines(100)[1]
@@ -114,13 +114,13 @@ def update_stats(request, ip_add=None):
                               'cache_memory': cache_memory+'M',
                               'available_memory': available_memory+'M'}
                     stats.memory_info = memory
-                    logging.info("memory: ", memory)
+                    logging.info("memory: {}".format(memory))
                 elif cmd == 'uptime':
                     stdin, stdout, stderr = ssh.exec_command(cmd)
                     cmd_out3 = stdout.readlines(10)
                     up_time = cmd_out3[0].split(",")[0].strip()
                     stats.up_time = up_time
-                    logging.info("uptime: ",up_time)
+                    logging.info("uptime: {}".format(up_time))
             except:
                 logging.error("Error while fetching stats")
         stats.save()
@@ -160,6 +160,7 @@ class ServerStatsController:
             return json.dumps(result)
 
     def get_stats_info_list(self, request):
+        connect_kafka_consumer('server_stats')
         if request.user.is_superuser:
             try:
                 obj = ServerStats.objects.all()
@@ -167,7 +168,9 @@ class ServerStatsController:
                 data = json.dumps(serializer_user.data)
                 result = {"status": "200_OK", "data": data}
                 logging.info(result)
-                connect_kafka_consumer('server_stats')
+                metrics.monitor_server_completed.inc()
+                #metrics.monitor_server_distance.observe(ServerStats.distance)
+                logging.info("metrics captured")
                 return json.dumps(result)
             except Exception as error:
                 logging.error(error)
@@ -179,6 +182,7 @@ class ServerStatsController:
 
     def get_stats_info(self, request, pk):
         ip_add = pk.replace("_",".")
+        connect_kafka_consumer('server_stats')
         if isHostValid(ip_add):
             try:
                 obj = ServerStats.objects.filter(server=ip_add)
@@ -186,9 +190,8 @@ class ServerStatsController:
                 data = json.dumps(serializer_user.data)
                 result = {"status": "200_OK", "data": data}
                 logging.info(result)
-                connect_kafka_consumer('server_stats')
                 metrics.monitor_server_completed.inc()
-                metrics.monitor_server_distance.observe(ServerStats.distance)
+                #metrics.monitor_server_distance.observe(ServerStats.distance)
                 logging.info("metrics captured")
                 return json.dumps(result)
             except Exception as error:

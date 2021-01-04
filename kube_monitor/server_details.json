@@ -1,0 +1,7 @@
+{
+    "server_credentials":[
+        {"host":"192.168.43.252", "username":"siva", "password":"cisco123"}
+    ],
+    "kafka_host":"localhost",
+    "kafka_port":9092
+}
